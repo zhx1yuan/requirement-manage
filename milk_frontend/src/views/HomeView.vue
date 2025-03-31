@@ -84,59 +84,43 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, ref, onMounted } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { Folder, Document } from '@element-plus/icons-vue'
 import type { Project, Document as DocumentType } from '@/types'
 import { getProjects } from '@/api/project'
 import { getDocument } from '@/api/document'
 
-export default defineComponent({
-  name: 'HomeView',
-  components: {
-    Folder,
-    Document
-  },
-  setup() {
-    const recentProjects = ref<Project[]>([])
-    const recentDocuments = ref<DocumentType[]>([])
+const recentProjects = ref<Project[]>([])
+const recentDocuments = ref<DocumentType[]>([])
 
-    const formatDate = (date: string) => {
-      return new Date(date).toLocaleString()
-    }
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleString()
+}
 
-    const fetchRecentData = async () => {
-      try {
-        // 获取最近的项目
-        const projects = await getProjects()
-        recentProjects.value = projects.slice(0, 5) // 只显示最近5个
+const fetchData = async () => {
+  try {
+    // 获取最近的项目
+    const projectsResponse = await getProjects()
+    recentProjects.value = projectsResponse.data.slice(0, 5) // 只显示最近5个
 
-        // TODO: 获取最近访问的文档
-        // 这里需要后端提供相应的API
-        // 暂时使用空数组
-        recentDocuments.value = []
-      } catch (error) {
-        console.error('Failed to fetch recent data:', error)
-      }
-    }
-
-    onMounted(() => {
-      fetchRecentData()
-    })
-
-    return {
-      recentProjects,
-      recentDocuments,
-      formatDate
-    }
+    // 获取最近的文档
+    // TODO: 需要后端提供获取最近文档列表的API
+    // 暂时使用空数组
+    recentDocuments.value = []
+  } catch (error) {
+    console.error('Failed to fetch data:', error)
   }
+}
+
+onMounted(() => {
+  fetchData()
 })
 </script>
 
 <style scoped>
 .home-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 20px;
 }
 
 .card-header {
@@ -153,16 +137,9 @@ export default defineComponent({
 
 .quick-actions .el-button {
   width: 100%;
-  height: 80px;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  font-size: 16px;
-}
-
-.quick-actions .el-icon {
-  font-size: 24px;
 }
 </style>

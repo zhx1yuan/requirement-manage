@@ -1,18 +1,22 @@
 import request from '@/utils/request'
 import type { Project } from '@/types'
 
-export function getProjects(): Promise<Project[]> {
-  return request.get('/api/projects')
+export function getProjects() {
+  return request.get<Project[]>('/projects/')
 }
 
-export function createProject(data: { name: string; description?: string }): Promise<Project> {
-  return request.post('/api/projects', data)
+export function createProject(data: Partial<Project>) {
+  return request.post<Project>('/projects/', data)
 }
 
-export function updateProject(id: number, data: { name?: string; description?: string }): Promise<Project> {
-  return request.put(`/api/projects/${id}`, data)
+export function updateProject(id: number, data: Partial<Project>) {
+  return request.put<Project>(`/projects/${id}`, data)
 }
 
-export function deleteProject(id: number): Promise<void> {
-  return request.delete(`/api/projects/${id}`)
+export function deleteProject(id: number) {
+  return request.delete(`/projects/${id}`)
+}
+
+export function getProjectById(id: number) {
+  return request.get<Project>(`/projects/${id}`)
 } 

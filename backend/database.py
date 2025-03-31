@@ -1,12 +1,18 @@
 # 配置数据库链接
 
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
+
+# 获取项目根目录
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 创建data目录（如果不存在）
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # 数据库URL
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'test.db')}"
 
 # 创建数据引擎
 engine = create_engine(

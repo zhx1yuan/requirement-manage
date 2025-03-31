@@ -1,8 +1,8 @@
-"""initial migration
+"""add description to project
 
-Revision ID: fcfc64ce60c8
+Revision ID: 9e494833e51e
 Revises: 
-Create Date: 2025-03-31 10:37:57.825872
+Create Date: 2025-03-31 17:11:08.216392
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'fcfc64ce60c8'
+revision: str = '9e494833e51e'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -43,6 +43,7 @@ def upgrade() -> None:
     op.create_table('projects',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=True),
+    sa.Column('description', sa.String(), nullable=True),
     sa.Column('owner_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -67,43 +68,28 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(), nullable=True),
     sa.Column('content', sa.Text(), nullable=True),
-    sa.Column('list_id', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.Column('version', sa.Integer(), nullable=True),
     sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.Column('list_id', sa.Integer(), nullable=True),
     sa.Column('creator_id', sa.Integer(), nullable=True),
     sa.Column('tags', sa.String(), nullable=True),
-    sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['list_id'], ['mylists.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['list_id'], ['mylists.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_documents_id'), 'documents', ['id'], unique=False)
     op.create_index(op.f('ix_documents_title'), 'documents', ['title'], unique=False)
-    op.create_table('document_comments',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('document_id', sa.Integer(), nullable=True),
-    sa.Column('user_id', sa.Integer(), nullable=True),
-    sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('updated_at', sa.DateTime(), nullable=True),
-    sa.Column('parent_id', sa.Integer(), nullable=True),
-    sa.Column('is_resolved', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['document_id'], ['documents.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['parent_id'], ['document_comments.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_document_comments_id'), 'document_comments', ['id'], unique=False)
     op.create_table('document_locks',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('document_id', sa.Integer(), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=True),
     sa.Column('locked_at', sa.DateTime(), nullable=True),
-    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['document_id'], ['documents.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['document_id'], ['documents.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_document_locks_id'), 'document_locks', ['id'], unique=False)
@@ -144,8 +130,6 @@ def downgrade() -> None:
     op.drop_table('document_permissions')
     op.drop_index(op.f('ix_document_locks_id'), table_name='document_locks')
     op.drop_table('document_locks')
-    op.drop_index(op.f('ix_document_comments_id'), table_name='document_comments')
-    op.drop_table('document_comments')
     op.drop_index(op.f('ix_documents_title'), table_name='documents')
     op.drop_index(op.f('ix_documents_id'), table_name='documents')
     op.drop_table('documents')

@@ -166,6 +166,7 @@ class ListTree(ListSchema):
 
 class ProjectBase(BaseModel):
     name: str
+    description: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     pass

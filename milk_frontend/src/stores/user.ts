@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@/types'
-import { login as apiLogin, register as apiRegister } from '@/api/auth'
+import { login as loginApi, register as registerApi } from '@/api/auth'
 import request from '@/utils/request'
 
 export const useUserStore = defineStore('user', () => {
@@ -10,41 +10,38 @@ export const useUserStore = defineStore('user', () => {
 
   const isAuthenticated = computed(() => !!token.value)
 
+  // 获取用户信息
+  async function fetchUserInfo() {
+    try {
+      const response = await request.get<User>('/users/me/')
+      user.value = response.data
+    } catch (error) {
+      console.error('Failed to fetch user info:', error)
+      user.value = null
+    }
+  }
+
   async function login(username: string, password: string) {
     try {
-      const response = await apiLogin(username, password)
-      console.log('Login response:', response)
-      
-      if (!response || !response.data || !response.data.access_token) {
-        throw new Error('登录响应数据格式错误')
-      }
-      
+      const response = await loginApi(username, password)
       token.value = response.data.access_token
       localStorage.setItem('token', response.data.access_token)
-      
-      // 获取用户信息
-      const userResponse = await request.get<User>('/users/me/')
-      console.log('User info response:', userResponse)
-      
-      if (!userResponse || !userResponse.data) {
-        throw new Error('获取用户信息失败')
-      }
-      
-      user.value = userResponse.data
+      // 登录成功后获取用户信息
+      await fetchUserInfo()
+      return true
     } catch (error) {
-      console.error('Login failed:', error)
-      throw error
+      return false
     }
   }
 
   async function register(username: string, password: string) {
     try {
-      await apiRegister(username, password)
+      const response = await registerApi(username, password)
       // 注册成功后自动登录
       await login(username, password)
+      return true
     } catch (error) {
-      console.error('Registration failed:', error)
-      throw error
+      return false
     }
   }
 
@@ -54,12 +51,18 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('token')
   }
 
+  // 初始化时如果有token，获取用户信息
+  if (token.value) {
+    fetchUserInfo()
+  }
+
   return {
     token,
     user,
     isAuthenticated,
     login,
     register,
-    logout
+    logout,
+    fetchUserInfo
   }
 }) 

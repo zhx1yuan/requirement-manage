@@ -1,14 +1,19 @@
 export interface User {
   id: number
   username: string
-  created_at: string
+  email?: string
+  is_active?: boolean
+  is_superuser?: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Project {
   id: number
   name: string
-  description: string
-  owner_id: number
+  description?: string
+  creator_id: number
+  creator?: User
   created_at: string
   updated_at: string
 }
@@ -16,52 +21,62 @@ export interface Project {
 export interface List {
   id: number
   name: string
+  description?: string
   project_id: number
-  parent_id: number | null
-  level_id: number
-  order_index: number
-  is_ordered: boolean
+  project?: Project
+  creator_id: number
+  creator?: User
   created_at: string
   updated_at: string
-  children?: List[]
 }
 
 export interface Document {
   id: number
   title: string
   content: string
-  list_id: number
+  project_id: number
+  project?: Project
   creator_id: number
-  version: number
-  is_deleted: boolean
+  creator: User
   created_at: string
   updated_at: string
+  versions: DocumentVersion[]
+  permissions: DocumentPermission[]
+  locks: DocumentLock[]
 }
 
 export interface DocumentVersion {
   id: number
   document_id: number
+  document?: Document
+  version: number
   title: string
   content: string
-  version: number
-  created_by_id: number
-  comment: string | null
+  comment?: string
+  creator_id: number
+  creator?: User
   created_at: string
 }
 
 export interface DocumentPermission {
   id: number
   document_id: number
+  document?: Document
   user_id: number
-  permission_level: 'READ' | 'WRITE' | 'ADMIN'
+  user?: User
+  can_read: boolean
+  can_write: boolean
+  can_delete: boolean
   created_at: string
+  updated_at: string
 }
 
 export interface DocumentLock {
   id: number
   document_id: number
+  document?: Document
   user_id: number
+  user?: User
   locked_at: string
   expires_at: string
-  is_active: boolean
 } 

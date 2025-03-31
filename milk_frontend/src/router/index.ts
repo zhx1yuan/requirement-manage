@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -12,7 +13,7 @@ const router = createRouter({
     },
     {
       path: '/',
-      component: () => import('@/layouts/DefaultLayout.vue'),
+      component: DefaultLayout,
       meta: { requiresAuth: true },
       children: [
         {
@@ -26,12 +27,12 @@ const router = createRouter({
           component: () => import('@/views/ProjectsView.vue')
         },
         {
-          path: 'projects/:projectId',
+          path: 'projects/:id',
           name: 'project-detail',
           component: () => import('@/views/ProjectDetailView.vue')
         },
         {
-          path: 'documents/:documentId',
+          path: 'documents/:id',
           name: 'document-detail',
           component: () => import('@/views/DocumentDetailView.vue')
         }
@@ -41,11 +42,14 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
-  
-  if (to.meta.requiresAuth && !userStore.isAuthenticated) {
+  const isAuthenticated = userStore.isAuthenticated
+
+  if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
+  } else if (to.name === 'login' && isAuthenticated) {
+    next({ name: 'home' })
   } else {
     next()
   }

@@ -15,7 +15,7 @@
       <div class="header-right">
         <el-dropdown @command="handleCommand">
           <span class="user-info">
-            {{ userStore.user?.username }}
+            {{ user?.username || '未登录' }}
             <el-icon><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
@@ -48,10 +48,12 @@
       </el-aside>
 
       <!-- 主要内容区 -->
-      <el-main class="main">
+      <el-main :class="['main', { collapsed: isCollapse }]">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <div class="main-content">
+              <component :is="Component" />
+            </div>
           </transition>
         </router-view>
       </el-main>
@@ -60,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import {
@@ -78,15 +80,29 @@ const userStore = useUserStore()
 const isCollapse = ref(false)
 const activeMenu = computed(() => route.path)
 
+// 获取用户信息
+const user = computed(() => userStore.user)
+
+// 在组件挂载时获取用户信息
+onMounted(async () => {
+  if (userStore.isAuthenticated && !user.value) {
+    await userStore.fetchUserInfo()
+  }
+})
+
 const toggleSidebar = () => {
   isCollapse.value = !isCollapse.value
 }
 
 const handleCommand = (command: string) => {
   if (command === 'logout') {
-    userStore.logout()
-    router.push('/login')
+    handleLogout()
   }
+}
+
+const handleLogout = () => {
+  userStore.logout()
+  router.push('/login')
 }
 </script>
 
@@ -94,6 +110,8 @@ const handleCommand = (command: string) => {
 .layout-container {
   height: 100vh;
   width: 100vw;
+  display: flex;
+  flex-direction: column;
 }
 
 .header {
@@ -104,6 +122,12 @@ const handleCommand = (command: string) => {
   border-bottom: 1px solid #dcdfe6;
   padding: 0 20px;
   height: 60px;
+  flex-shrink: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
 }
 
 .header-left {
@@ -134,6 +158,13 @@ const handleCommand = (command: string) => {
   gap: 4px;
   cursor: pointer;
   color: #606266;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.user-info:hover {
+  background-color: #f5f7fa;
 }
 
 .aside {
@@ -142,6 +173,12 @@ const handleCommand = (command: string) => {
   transition: width 0.3s;
   height: calc(100vh - 60px);
   overflow-y: auto;
+  flex-shrink: 0;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  bottom: 0;
+  z-index: 999;
 }
 
 .menu {
@@ -158,6 +195,27 @@ const handleCommand = (command: string) => {
   padding: 20px;
   height: calc(100vh - 60px);
   overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: 200px;
+  margin-top: 60px;
+  transition: margin-left 0.3s;
+}
+
+.main.collapsed {
+  margin-left: 64px;
+}
+
+.main-content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  padding: 20px;
 }
 
 .fade-enter-active,

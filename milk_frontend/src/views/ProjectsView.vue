@@ -86,151 +86,132 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, ref, onMounted } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { Project } from '@/types'
 import { getProjects, createProject, updateProject, deleteProject } from '@/api/project'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute } from 'vue-router'
 
-export default defineComponent({
-  name: 'ProjectsView',
-  components: {
-    Plus
-  },
-  setup() {
-    const loading = ref(false)
-    const projects = ref<Project[]>([])
-    const dialogVisible = ref(false)
-    const dialogType = ref<'create' | 'edit'>('create')
-    const formRef = ref<FormInstance>()
-    const currentProject = ref<Project | null>(null)
+const loading = ref(false)
+const projects = ref<Project[]>([])
+const dialogVisible = ref(false)
+const dialogType = ref<'create' | 'edit'>('create')
+const formRef = ref<FormInstance>()
+const form = ref<Partial<Project>>({
+  name: '',
+  description: ''
+})
 
-    const form = ref({
-      name: '',
-      description: ''
-    })
+const rules: FormRules = {
+  name: [
+    { required: true, message: '请输入项目名称', trigger: 'blur' },
+    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+  ],
+  description: [
+    { max: 200, message: '长度不能超过 200 个字符', trigger: 'blur' }
+  ]
+}
 
-    const rules: FormRules = {
-      name: [
-        { required: true, message: '请输入项目名称', trigger: 'blur' },
-        { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
-      ],
-      description: [
-        { max: 200, message: '长度不能超过 200 个字符', trigger: 'blur' }
-      ]
-    }
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleString()
+}
 
-    const formatDate = (date: string) => {
-      return new Date(date).toLocaleString()
-    }
+const fetchProjects = async () => {
+  loading.value = true
+  try {
+    console.log('开始获取项目列表...')
+    const response = await getProjects()
+    console.log('获取到的项目数据:', response.data)
+    projects.value = response.data.map(project => ({
+      ...project,
+      description: project.description || ''
+    }))
+  } catch (error) {
+    console.error('获取项目列表失败:', error)
+    ElMessage.error('获取项目列表失败')
+  } finally {
+    loading.value = false
+  }
+}
 
-    const fetchProjects = async () => {
-      loading.value = true
+const showCreateDialog = () => {
+  dialogType.value = 'create'
+  form.value = {
+    name: '',
+    description: ''
+  }
+  dialogVisible.value = true
+}
+
+const showEditDialog = (row: Project) => {
+  dialogType.value = 'edit'
+  form.value = {
+    name: row.name,
+    description: row.description || ''
+  }
+  dialogVisible.value = true
+}
+
+const handleSubmit = async () => {
+  if (!formRef.value) return
+  
+  await formRef.value.validate(async (valid) => {
+    if (valid) {
       try {
-        projects.value = await getProjects()
-      } catch (error) {
-        console.error('Failed to fetch projects:', error)
-        ElMessage.error('获取项目列表失败')
-      } finally {
-        loading.value = false
-      }
-    }
-
-    const showCreateDialog = () => {
-      dialogType.value = 'create'
-      form.value = {
-        name: '',
-        description: ''
-      }
-      dialogVisible.value = true
-    }
-
-    const showEditDialog = (project: Project) => {
-      dialogType.value = 'edit'
-      currentProject.value = project
-      form.value = {
-        name: project.name,
-        description: project.description
-      }
-      dialogVisible.value = true
-    }
-
-    const handleSubmit = async () => {
-      if (!formRef.value) return
-      
-      await formRef.value.validate(async (valid) => {
-        if (valid) {
-          try {
-            if (dialogType.value === 'create') {
-              await createProject(form.value)
-              ElMessage.success('创建项目成功')
-            } else {
-              if (currentProject.value) {
-                await updateProject(currentProject.value.id, form.value)
-                ElMessage.success('更新项目成功')
-              }
-            }
-            dialogVisible.value = false
-            fetchProjects()
-          } catch (error) {
-            console.error('Failed to submit form:', error)
-            ElMessage.error(dialogType.value === 'create' ? '创建项目失败' : '更新项目失败')
-          }
+        console.log('提交的表单数据:', form.value)
+        if (dialogType.value === 'create') {
+          const response = await createProject(form.value)
+          console.log('创建项目响应:', response.data)
+          ElMessage.success('创建成功')
+        } else {
+          const response = await updateProject(form.value.id!, form.value)
+          console.log('更新项目响应:', response.data)
+          ElMessage.success('更新成功')
         }
-      })
-    }
-
-    const handleDelete = async (project: Project) => {
-      try {
-        await ElMessageBox.confirm(
-          '确定要删除该项目吗？此操作不可恢复。',
-          '警告',
-          {
-            confirmButtonText: '确定',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        )
-        
-        await deleteProject(project.id)
-        ElMessage.success('删除项目成功')
-        fetchProjects()
+        dialogVisible.value = false
+        await fetchProjects()
       } catch (error) {
-        if (error !== 'cancel') {
-          console.error('Failed to delete project:', error)
-          ElMessage.error('删除项目失败')
-        }
+        console.error('提交表单失败:', error)
+        ElMessage.error(dialogType.value === 'create' ? '创建失败' : '更新失败')
       }
     }
+  })
+}
 
-    onMounted(() => {
-      fetchProjects()
+const handleDelete = async (row: Project) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该项目吗？', '提示', {
+      type: 'warning'
     })
-
-    return {
-      loading,
-      projects,
-      dialogVisible,
-      dialogType,
-      formRef,
-      form,
-      rules,
-      formatDate,
-      showCreateDialog,
-      showEditDialog,
-      handleSubmit,
-      handleDelete
+    await deleteProject(row.id)
+    ElMessage.success('删除成功')
+    fetchProjects()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Failed to delete project:', error)
+      ElMessage.error('删除失败')
     }
   }
+}
+
+const route = useRoute()
+watch(() => route.path, () => {
+  console.log('路由变化，重新获取项目列表')
+  fetchProjects()
+})
+
+onMounted(() => {
+  console.log('组件挂载，获取项目列表')
+  fetchProjects()
 })
 </script>
 
 <style scoped>
 .projects-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 20px;
 }
 
 .page-header {

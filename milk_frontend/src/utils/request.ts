@@ -6,7 +6,14 @@ import { useUserStore } from '@/stores/user'
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
   timeout: 5000,
-  withCredentials: true
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  }
 })
 
 // 请求拦截器
@@ -21,8 +28,16 @@ request.interceptors.request.use(
       url: config.url,
       method: config.method,
       headers: config.headers,
-      data: config.data
+      data: config.data,
+      baseURL: config.baseURL
     })
+    // 确保GET请求不会被缓存
+    if (config.method === 'get') {
+      config.params = {
+        ...config.params,
+        _t: Date.now()
+      }
+    }
     return config
   },
   error => {
@@ -38,16 +53,17 @@ request.interceptors.response.use(
     console.log('Response:', {
       status: response.status,
       headers: response.headers,
-      data: response.data
+      data: response.data,
+      config: response.config
     })
-    // 直接返回响应数据
     return response
   },
   error => {
     console.error('Response Error:', {
       message: error.message,
       config: error.config,
-      response: error.response
+      response: error.response,
+      request: error.request
     })
     
     if (error.response) {
@@ -65,7 +81,7 @@ request.interceptors.response.use(
           ElMessage.error('没有权限执行此操作')
           break
         case 404:
-          ElMessage.error('请求的资源不存在')
+          ElMessage.error(`请求的资源不存在: ${error.config.url}`)
           break
         case 409:
           ElMessage.error('资源冲突')

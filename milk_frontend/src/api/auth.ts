@@ -13,7 +13,8 @@ export function login(username: string, password: string) {
   
   return request.post<LoginResponse>('/token', formData, {
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json'
     }
   })
 }
@@ -22,5 +23,10 @@ export function register(username: string, password: string) {
   return request.post<User>('/users/', {
     username,
     password
+  }, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
   })
 } 
