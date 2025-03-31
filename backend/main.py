@@ -2,6 +2,8 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 # import uvicorn
 
@@ -13,7 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from backend.database import engine, get_db
 
-from backend import models, schemas, crud, auth
+from backend import models, schemas, crud, auth, exceptions
 from backend.models import PermissionLevel
 
 from fastapi.responses import FileResponse
@@ -30,6 +32,11 @@ app.mount('/swagger-ui-master', StaticFiles(directory='swagger-ui-master'))
 # 允许的源列表
 origins = [
     "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:3000",
     # 可以添加更多允许的源
 ]
 
@@ -611,3 +618,45 @@ def read_items(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 @app.post("/items/", response_model=schemas.Item)
 def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
     return crud.create_item(db=db, item=item)
+
+@app.exception_handler(exceptions.DocumentNotFoundError)
+async def document_not_found_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(exceptions.PermissionDeniedError)
+async def permission_denied_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(exceptions.DocumentLockedError)
+async def document_locked_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(exceptions.DatabaseError)
+async def database_error_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(exceptions.ValidationError)
+async def validation_error_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(request, exc):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "数据库操作失败"}
+    )

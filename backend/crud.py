@@ -1,11 +1,13 @@
 ###############     对数据库进行操作      #################
 # 定义CRUD操作
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from . import models, schemas
 from .auth import get_password_hash
 from typing import List, Optional
 from datetime import datetime, timedelta
 from .models import PermissionLevel
+from backend import exceptions
 
 
 ###############     用户读取/创建      #################
@@ -296,8 +298,12 @@ def get_document(
 ) -> Optional[models.Document]:
     """获取文档（带权限检查）"""
     if not check_document_permission(db, document_id, user_id, PermissionLevel.READ):
-        return None
-    return db.query(models.Document).filter(models.Document.id == document_id).first()
+        raise exceptions.PermissionDeniedError()
+    
+    document = db.query(models.Document).filter(models.Document.id == document_id).first()
+    if not document:
+        raise exceptions.DocumentNotFoundError()
+    return document
 
 def update_document(
     db: Session,
@@ -308,31 +314,35 @@ def update_document(
 ) -> Optional[models.Document]:
     """更新文档（带权限检查）"""
     if not check_document_permission(db, document_id, user_id, PermissionLevel.WRITE):
-        return None
+        raise exceptions.PermissionDeniedError()
     
     db_document = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not db_document:
-        return None
+        raise exceptions.DocumentNotFoundError()
     
-    # 创建新版本
-    db_version = models.DocumentVersion(
-        document_id=document_id,
-        title=db_document.title,
-        content=db_document.content,
-        version=db_document.version,
-        created_by_id=user_id,
-        comment=comment
-    )
-    db.add(db_version)
-    
-    # 更新文档
+    try:
+        # 创建新版本
+        db_version = models.DocumentVersion(
+            document_id=document_id,
+            title=db_document.title,
+            content=db_document.content,
+            version=db_document.version,
+            created_by_id=user_id,
+            comment=comment
+        )
+        db.add(db_version)
+        
+        # 更新文档
         for key, value in document.dict().items():
             setattr(db_document, key, value)
-    db_document.version += 1
-    
+        db_document.version += 1
+        
         db.commit()
         db.refresh(db_document)
-    return db_document
+        return db_document
+    except SQLAlchemyError:
+        db.rollback()
+        raise exceptions.DatabaseError()
 
 def delete_document(
     db: Session,
@@ -364,180 +374,119 @@ def create_document_version(
     comment: str = None
 ) -> models.DocumentVersion:
     """创建文档新版本"""
-    document = get_document(db, document_id, user_id)
-    if not document:
-        raise ValueError(f"文档 {document_id} 不存在")
-    
-    db_version = models.DocumentVersion(
-        document_id=document_id,
-        title=document.title,
-        content=content,
-        version=document.version,
-        created_by_id=user_id,
-        comment=comment
-    )
-    db.add(db_version)
-    document.version += 1
-    db.commit()
-    db.refresh(db_version)
-    return db_version
+    try:
+        document = get_document(db, document_id, user_id)
+        if not document:
+            raise exceptions.DocumentNotFoundError()
+        
+        db_version = models.DocumentVersion(
+            document_id=document_id,
+            title=document.title,
+            content=content,
+            version=document.version,
+            created_by_id=user_id,
+            comment=comment
+        )
+        db.add(db_version)
+        document.version += 1
+        db.commit()
+        db.refresh(db_version)
+        return db_version
+    except SQLAlchemyError:
+        db.rollback()
+        raise exceptions.DatabaseError()
+    except exceptions.DocumentNotFoundError:
+        raise
+    except Exception as e:
+        raise exceptions.DatabaseError(str(e))
 
 def restore_document_version(db: Session, document_id: int, version: int, user_id: int):
-    """恢复到指定版本"""
-    document = get_document(db, document_id)
-    if not document:
-        raise ValueError(f"文档 {document_id} 不存在")
-    
-    version_record = db.query(models.DocumentVersion).filter(
-        models.DocumentVersion.document_id == document_id,
-        models.DocumentVersion.version == version
-    ).first()
-    
-    if not version_record:
-        raise ValueError(f"版本 {version} 不存在")
-    
-    # 创建新版本，内容为指定版本的内容
-    create_document_version(
-        db,
-        document_id,
-        version_record.content,
-        user_id,
-        f"恢复到版本 {version}"
-    )
-    
-    return document
+    """恢复文档到指定版本"""
+    try:
+        document = get_document(db, document_id, user_id)
+        if not document:
+            raise exceptions.DocumentNotFoundError()
+            
+        version_record = db.query(models.DocumentVersion).filter(
+            models.DocumentVersion.document_id == document_id,
+            models.DocumentVersion.version == version
+        ).first()
+        
+        if not version_record:
+            raise exceptions.DocumentNotFoundError(f"版本 {version} 不存在")
+            
+        document.content = version_record.content
+        document.version += 1
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise exceptions.DatabaseError()
+    except exceptions.DocumentNotFoundError:
+        raise
+    except Exception as e:
+        raise exceptions.DatabaseError(str(e))
 
 def acquire_document_lock(
     db: Session,
     document_id: int,
     user_id: int,
     lock_duration: int = 30
-) -> Optional[models.DocumentLock]:
+) -> models.DocumentLock:
     """获取文档编辑锁"""
-    # 检查是否有其他用户正在编辑
-    current_time = datetime.utcnow()
-    existing_lock = db.query(models.DocumentLock).filter(
-        models.DocumentLock.document_id == document_id,
-        models.DocumentLock.is_active == True,
-        models.DocumentLock.expires_at > current_time
-    ).first()
-    
-    if existing_lock:
-        return None
-    
-    # 创建新的锁定记录
-    expires_at = current_time + timedelta(minutes=lock_duration)
-    db_lock = models.DocumentLock(
-        document_id=document_id,
-        user_id=user_id,
-        expires_at=expires_at
-    )
-    db.add(db_lock)
-    db.commit()
-    db.refresh(db_lock)
-    return db_lock
+    try:
+        # 检查是否有其他用户正在编辑
+        existing_lock = db.query(models.DocumentLock).filter(
+            models.DocumentLock.document_id == document_id,
+            models.DocumentLock.is_active == True,
+            models.DocumentLock.expires_at > datetime.utcnow()
+        ).first()
+        
+        if existing_lock:
+            if existing_lock.user_id != user_id:
+                raise exceptions.DocumentLockedError(f"文档已被用户 {existing_lock.user_id} 锁定")
+            return existing_lock
+            
+        # 创建新的锁定记录
+        expires_at = datetime.utcnow() + timedelta(minutes=lock_duration)
+        db_lock = models.DocumentLock(
+            document_id=document_id,
+            user_id=user_id,
+            locked_at=datetime.utcnow(),
+            expires_at=expires_at,
+            is_active=True
+        )
+        db.add(db_lock)
+        db.commit()
+        db.refresh(db_lock)
+        return db_lock
+    except SQLAlchemyError:
+        db.rollback()
+        raise exceptions.DatabaseError()
+    except exceptions.DocumentLockedError:
+        raise
+    except Exception as e:
+        raise exceptions.DatabaseError(str(e))
 
-def release_document_lock(
-    db: Session,
-    document_id: int,
-    user_id: int
-) -> bool:
+def release_document_lock(db: Session, document_id: int, user_id: int) -> bool:
     """释放文档编辑锁"""
-    current_time = datetime.utcnow()
-    lock = db.query(models.DocumentLock).filter(
-        models.DocumentLock.document_id == document_id,
-        models.DocumentLock.user_id == user_id,
-        models.DocumentLock.is_active == True,
-        models.DocumentLock.expires_at > current_time
-    ).first()
-    
-    if lock:
+    try:
+        lock = db.query(models.DocumentLock).filter(
+            models.DocumentLock.document_id == document_id,
+            models.DocumentLock.user_id == user_id,
+            models.DocumentLock.is_active == True
+        ).first()
+        
+        if not lock:
+            return False
+            
         lock.is_active = False
         db.commit()
         return True
-    return False
-
-def create_document_comment(
-    db: Session,
-    document_id: int,
-    user_id: int,
-    content: str,
-    parent_id: Optional[int] = None
-) -> models.DocumentComment:
-    """创建文档评论"""
-    db_comment = models.DocumentComment(
-        document_id=document_id,
-        user_id=user_id,
-        content=content,
-        parent_id=parent_id
-    )
-    db.add(db_comment)
-    db.commit()
-    db.refresh(db_comment)
-    return db_comment
-
-def get_document_comments(
-    db: Session,
-    document_id: int
-) -> List[models.DocumentComment]:
-    """获取文档的所有评论"""
-    return db.query(models.DocumentComment).filter(
-        models.DocumentComment.document_id == document_id,
-        models.DocumentComment.parent_id.is_(None)  # 只获取顶级评论
-    ).all()
-
-def update_document_comment(
-    db: Session,
-    comment_id: int,
-    user_id: int,
-    content: str
-) -> Optional[models.DocumentComment]:
-    """更新文档评论"""
-    comment = db.query(models.DocumentComment).filter(
-        models.DocumentComment.id == comment_id,
-        models.DocumentComment.user_id == user_id
-    ).first()
-    
-    if comment:
-        comment.content = content
-        db.commit()
-        db.refresh(comment)
-    return comment
-
-def delete_document_comment(
-    db: Session,
-    comment_id: int,
-    user_id: int
-) -> bool:
-    """删除文档评论"""
-    comment = db.query(models.DocumentComment).filter(
-        models.DocumentComment.id == comment_id,
-        models.DocumentComment.user_id == user_id
-    ).first()
-    
-    if comment:
-        db.delete(comment)
-        db.commit()
-        return True
-    return False
-
-def resolve_document_comment(
-    db: Session,
-    comment_id: int,
-    user_id: int
-) -> Optional[models.DocumentComment]:
-    """标记评论为已解决"""
-    comment = db.query(models.DocumentComment).filter(
-        models.DocumentComment.id == comment_id,
-        models.DocumentComment.user_id == user_id
-    ).first()
-    
-    if comment:
-        comment.is_resolved = True
-        db.commit()
-        db.refresh(comment)
-    return comment
-
+    except SQLAlchemyError:
+        db.rollback()
+        raise exceptions.DatabaseError()
+    except Exception as e:
+        raise exceptions.DatabaseError(str(e))
 
 ###############     预留      #################
 
